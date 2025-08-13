@@ -5,7 +5,7 @@
 
 
 typedef struct Node {
-    int value;
+    void *value;
     struct Node* next;
 } Node;
 
@@ -18,30 +18,31 @@ typedef struct Stack {
 #define TAG_MASK  ((uint64_t)0xFFFF << TAG_SHIFT)
 #define PTR_MASK  ((uint64_t)0x0000FFFFFFFFFFFF)
 
-static inline Node* get_ptr(uint64_t tagged) {
+
+// Tagged pointer 구성
+static inline uint64_t pack_tagged_ptr(Node* ptr, uint16_t tag) 
+{
+    return ((uint64_t)tag << TAG_SHIFT) | ((uintptr_t)ptr & PTR_MASK);
+}
+
+// 포인터 추출
+static inline Node* unpack_ptr(uint64_t tagged)
+{
     return (Node*)(tagged & PTR_MASK);
 }
 
-static inline uint16_t get_tag(uint64_t tagged) {
-    return (uint16_t)((tagged >> 48) & 0xFFFF);
+// 태그 추출
+static inline uint16_t unpack_tag(uint64_t tagged) 
+{
+    return (tagged >> TAG_SHIFT) & 0xFFFF;
 }
 
-static inline uint64_t make_tagged(Node* ptr, uint16_t tag) {
-    return ((uint64_t)tag << 48) | ((uint64_t)ptr & PTR_MASK);
-}
-
-// 스택 초기화
 static inline void initStack(Stack* s) {
-    s->top = 0; // NULL 포인터 + tag=0
-}
-
-// 스택이 비었는지 확인
-static inline bool isEmpty(Stack* s) {
-    return s->top == 0;
+    s->top = 0;
 }
 
 // push/pop 함수 선언
-bool push(Stack* s, int value);
-bool pop(Stack* s, int* value);
+void push(Stack* s, Node* node) ;
+Node* pop(Stack* s) ;
 
 #endif // STACK_H

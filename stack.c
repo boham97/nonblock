@@ -2,34 +2,12 @@
 #include <stdlib.h>
 #include <stdint.h>             //for uint64_t
 #include <unistd.h>
+#include "stack.h"
 
 #define TAG_SHIFT 48
 #define TAG_MASK  ((uint64_t)0xFFFF << TAG_SHIFT)
 #define PTR_MASK  ((uint64_t)0x0000FFFFFFFFFFFF)
 
-
-
-// Tagged pointer 구성
-uint64_t pack_tagged_ptr(Node* ptr, uint16_t tag) 
-{
-    return ((uint64_t)tag << TAG_SHIFT) | ((uintptr_t)ptr & PTR_MASK);
-}
-
-// 포인터 추출
-Node* unpack_ptr(uint64_t tagged)
-{
-    return (Node*)(tagged & PTR_MASK);
-}
-
-// 태그 추출
-uint16_t unpack_tag(uint64_t tagged) 
-{
-    return (tagged >> TAG_SHIFT) & 0xFFFF;
-}
-
-void initStack(Stack* s) {
-    s->top = 0;
-}
 
 void push(Stack* s, Node* node) 
 {
