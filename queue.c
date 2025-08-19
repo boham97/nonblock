@@ -9,6 +9,21 @@
 #define PTR_MASK  ((uint64_t)0x0000FFFFFFFFFFFF)
 
 
+Queue *queue_init()
+{
+    Queue* q = malloc(sizeof(Queue));
+    Node* dummy = malloc(sizeof(Node));
+    dummy->value = NULL;
+    dummy->next = NULL;
+
+    uint64_t tagptr = pack_tagged_ptr(dummy, 0);
+
+    q->head = tagptr;
+    q->tail = tagptr;
+
+    return q;
+}
+
 void push(Queue* q, Node* node) 
 {
     uint64_t old_top, new_top;
