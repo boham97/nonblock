@@ -12,7 +12,7 @@
 void initQueue(Queue* q)
 {
     Node* dummy = malloc(sizeof(Node));
-    dummy->value = NULL;
+    dummy->value = (void*)(intptr_t)99999 ;
     dummy->next = 0;
 
     uint64_t tagptr = pack_tagged_ptr(dummy, 0);
@@ -69,25 +69,31 @@ void enqueue(Queue* q,  void *value)
 
 Node* dequeue(Queue* q) 
 {
-    uint64_t dummy_head, old_head, new_head;
+    uint64_t dummy_head, old_head, old_next, new_head;
     uint16_t old_tag;
-    Node* node;
+    Node* node, *old_node;
     Node* dummy;
     do
     {
         dummy_head = q->head;
         dummy = unpack_ptr(dummy_head);
- 
+        
         old_head = dummy->next;
-        old_tag = unpack_tag(old_tag);
-        node = unpack_ptr(old_head);
-        if (!node) return NULL;
-
-
-
+        old_tag = unpack_tag(old_head);
+        old_node = unpack_ptr(old_head);
+        if (!old_node) return NULL;
+        old_next = old_node->next;
+        node = unpack_ptr(old_next);
+        //printf("dummy: %d %d\n", (int)(intptr_t)(dummy->value), (int)(intptr_t)(old_node->value));
         new_head = pack_tagged_ptr(node, old_tag + 1);
+        if (!node) continue;
+        
+        //printf("dummy: %d %d %d\n", (int)(intptr_t)(dummy->value), (int)(intptr_t)(old_node->value), (int)(intptr_t)(node->value));
 
+
+
+        
     } while (!__sync_bool_compare_and_swap(&(dummy->next), old_head, new_head));
 
-    return node;
+    return old_node;
 }

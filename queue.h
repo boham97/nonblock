@@ -6,7 +6,7 @@
 
 typedef struct Node {
     void *value;
-    struct Node* next;
+    uint64_t next;
 } Node;
 
 typedef struct Queue {
@@ -38,13 +38,10 @@ static inline uint16_t unpack_tag(uint64_t tagged)
     return (tagged >> TAG_SHIFT) & 0xFFFF;
 }
 
-static inline void initQueue(Queue* q) 
-{
-    q->top = 0;
-}
+void initQueue(Queue* q);
 
 // push/pop 함수 선언
-void push(Queue* q, Node* node);
-Node* pop(Queue* q);
+void enqueue(Queue* q,  void *value);
+Node* dequeue(Queue* q);
 
 #endif // QUEUE_H
