@@ -81,19 +81,25 @@ Node* dequeue(Queue* q)
         old_head = dummy->next;
         old_tag = unpack_tag(old_head);
         old_node = unpack_ptr(old_head);
-        if (!old_node) return NULL;
+        if (!old_node) {return NULL;}
         old_next = old_node->next;
         node = unpack_ptr(old_next);
         //printf("dummy: %d %d\n", (int)(intptr_t)(dummy->value), (int)(intptr_t)(old_node->value));
         new_head = pack_tagged_ptr(node, old_tag + 1);
-        if (!node) continue;
-        
-        //printf("dummy: %d %d %d\n", (int)(intptr_t)(dummy->value), (int)(intptr_t)(old_node->value), (int)(intptr_t)(node->value));
-
+        if (node)
+            printf("dummy: %d %d %d\n", (int)(intptr_t)(dummy->value), (int)(intptr_t)(old_node->value), (int)(intptr_t)(node->value));
+        else
+            printf("node is null\n");
 
 
         
     } while (!__sync_bool_compare_and_swap(&(dummy->next), old_head, new_head));
 
+    if (!node) 
+    {
+        __sync_bool_compare_and_swap(&(q->tail), 
+        pack_tagged_ptr(old_node, unpack_tag(q->tail)), 
+        pack_tagged_ptr(dummy, unpack_tag(q->tail) + 1));
+    }
     return old_node;
 }
