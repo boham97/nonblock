@@ -4,9 +4,15 @@
 #include <stdint.h>  
 #include "queue.h"
 #include <unistd.h>
+#include <sched.h>
+#include <time.h>
+
+// 측정 코드 추가
+struct timespec start, end;
+
 
 #define THREADS 5
-#define OPS     20000
+#define OPS     4000000
 
 Queue q;
 
@@ -21,8 +27,8 @@ void* producer(void* arg)
     for (int i = 0; i < OPS; i++) 
     {
         enqueue(&q, (void*)(intptr_t)(id * OPS + i + 1 ));
-        // printf("th %d append: %d\n", id,  id * OPS + i + 1);
     }
+    // printf("th %d append: %d\n", id,  id * (OPS + 1) + 1);
     return NULL;
 }
 
@@ -31,6 +37,7 @@ void* consumer(void* arg)
     int id = (intptr_t)arg;
     int cnt = 0;
     int pop_count = 0;
+    int count = 0;
     Node* n;
     while (pop_count < OPS) 
     {
@@ -40,12 +47,10 @@ void* consumer(void* arg)
             cnt = (int)(intptr_t)(n->value);
             free(n);
             pop_count++;
-            // printf("th:%d pop: %d\n", id, cnt);
-            usleep(1);
         }
-        else
-            usleep(1);
+        sched_yield();
     }
+    printf("th:%d pop: %d\n", id, cnt);
     return NULL;
 }
 
@@ -53,7 +58,7 @@ int main() {
     initQueue(&q);
 
     pthread_t prod[THREADS], cons[THREADS];
-
+    clock_gettime(CLOCK_MONOTONIC, &start);
     for (int i = 0; i < THREADS; i++) 
     {
         pthread_create(&prod[i], NULL, producer, (void*)(intptr_t)i);
@@ -68,7 +73,11 @@ int main() {
     {
         pthread_join(cons[i], NULL);
     }
-
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double elapsed = (end.tv_sec - start.tv_sec) + 
+                    (end.tv_nsec - start.tv_nsec) / 1e9;
+    printf("Total ops: %d, Time: %.2fs, Rate: %.0f ops/sec\n", 
+       THREADS * OPS, elapsed, (THREADS * OPS) / elapsed);
     printf("All threads finished.\n");
     if(dequeue(&q))printf("something wrong\n");
     // if(dequeue(&q))printf("something wrong\n");
