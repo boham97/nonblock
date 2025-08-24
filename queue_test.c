@@ -12,7 +12,7 @@ struct timespec start, end;
 
 
 #define THREADS 5
-#define OPS     4000000
+#define OPS     400000
 
 Queue q;
 
@@ -48,7 +48,8 @@ void* consumer(void* arg)
             free(n);
             pop_count++;
         }
-        sched_yield();
+        // usleep(1);      //-->Total ops: 2000000, Time: 28.50s, Rate: 70181 ops/sec 성능 안좋음!
+        sched_yield();  //-->Total ops: 2000000, Time: 0.46s, Rate: 4376085 ops/sec
     }
     printf("th:%d pop: %d\n", id, cnt);
     return NULL;
