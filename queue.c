@@ -86,10 +86,10 @@ Node* dequeue(Queue* q)
         node = unpack_ptr(old_next);
         //printf("dummy: %d %d\n", (int)(intptr_t)(dummy->value), (int)(intptr_t)(old_node->value));
         new_head = pack_tagged_ptr(node, old_tag + 1);
-        if (node)
-            printf("dummy: %d %d %d\n", (int)(intptr_t)(dummy->value), (int)(intptr_t)(old_node->value), (int)(intptr_t)(node->value));
-        else
-            printf("node is null\n");
+        // if (node)
+        //     printf("%d %d\n", (int)(intptr_t)(old_node->value), (int)(intptr_t)(node->value));
+        // else
+        //     printf("node is null\n");
 
 
         

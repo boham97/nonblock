@@ -11,7 +11,7 @@
 struct timespec start, end;
 
 
-#define THREADS 5
+#define THREADS 12                          //6 보다 12가 ops 높음
 #define OPS     400000
 
 Queue q;
@@ -57,6 +57,29 @@ void* consumer(void* arg)
 
 int main() {
     initQueue(&q);
+
+    //glibc pool에 미리 로딩ㅋㅋㅋㅋ
+    const int N = 10000;
+    Node *nodes[N];
+    for (int i = 0; i < N; i++) 
+    {
+        nodes[i] = (Node *)malloc(sizeof(Node));
+        if (!nodes[i]) {
+            fprintf(stderr, "malloc failed at %d\n", i);
+            exit(1);
+        }
+        nodes[i]->value = NULL;
+        nodes[i]->next = 0;
+    }
+
+    printf("Allocated %d nodes\n", N);
+
+    // 10,000개 해제
+    for (int i = 0; i < N; i++) 
+    {
+        free(nodes[i]);
+    }  
+
 
     pthread_t prod[THREADS], cons[THREADS];
     clock_gettime(CLOCK_MONOTONIC, &start);
