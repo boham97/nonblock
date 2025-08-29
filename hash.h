@@ -26,10 +26,10 @@ void hash_init(hash_map *map);
 void hash_free(hash_map *map);
 int hash_insert(hash_map * map, unsigned long tid, int value);
 int hash_get(hash_map * map, unsigned long tid);
-int hash_delete(hash_map * map);
-int hash_delete_soft(hash_map * map, unsigned long tid);
+int hash_delete(hash_map *map, unsigned long tid);
+
 void clean_trash(hash_map *map);
 
 
-
+//소프트 삭제? 락프리? --> 같은 해시인 엔트리 생겨도 모름ㅋㅋㅋ --> 버킷별 락을 걸자
 #endif
