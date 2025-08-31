@@ -83,44 +83,27 @@ int hash_get(hash_map * map, unsigned long tid)
 }
 
 
-int hash_get_all(hash_map *map)
-{
-    entry_st *entry = NULL;
-    int index = 0;
-    int i = 0;
-    for (i = 0; i < MAX_HASH_SIZE; i++)
-    {
-
-        
-        get_lock(map, i);
-        entry_st *entry = map->bucket[i];
-        while (entry) 
-        {
-            printf("hash_get_all: %lu %d %d\n", entry->key, entry->value, entry->delete_flag);
-            entry = entry->next;
-        }
-        release_lock(map, i);
-    }
-    sleep(1);
-    clean_trash(map);
-    return TRUE; 
-}
-
-
 int hash_delete(hash_map *map, unsigned long tid)
 {
     int index = hash(tid);
-    entry_st *entry = map->bucket[index];
+    entry_st *curr = map->bucket[index];
+    entry_st *prev = NULL;
     get_lock(map, index);
-    while (entry) 
+    while (curr) 
     {
-        if (tid == entry->key)
+        if (tid == curr->key)
         {
-            //메모리 가시성
-            __sync_bool_compare_and_swap(&entry->delete_flag, FALSE, TRUE);
+            if(prev)
+                __sync_bool_compare_and_swap(&prev->next, curr, curr->next);
+            else
+                __sync_bool_compare_and_swap(&map->bucket[index], curr, curr->next);
+
+            free(curr);                                     //위험 수정 필요!: FREE할떄 읽고 있을수 있음
+            release_lock(map, index);
             return TRUE;
         }
-        entry = entry->next;
+        prev = curr;
+        curr = curr->next;
     }
     release_lock(map, index);
     return FALSE;  // 키를 찾지 못한 경우
