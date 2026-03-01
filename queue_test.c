@@ -42,6 +42,10 @@ void* consumer(void* arg)
             //free(n);
             pop_count++;
         }
+        else
+        {
+            sched_yield();
+        }
     }
     return NULL;
 }
