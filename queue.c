@@ -86,7 +86,6 @@ Node* dequeue(Queue* q)
         node = unpack_ptr(old_next);
         //printf("dummy: %d %d\n", (int)(intptr_t)(dummy->value), (int)(intptr_t)(old_node->value));
         new_head = pack_tagged_ptr(node, old_tag + 1);
-        if (!node) continue;
         
         //printf("dummy: %d %d %d\n", (int)(intptr_t)(dummy->value), (int)(intptr_t)(old_node->value), (int)(intptr_t)(node->value));
 
