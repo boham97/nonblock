@@ -48,8 +48,10 @@ void* consumer(void* arg)
             free(n);
             pop_count++;
         }
-        // usleep(1);      //-->Total ops: 2000000, Time: 28.50s, Rate: 70181 ops/sec 성능 안좋음!
-        sched_yield();  //-->Total ops: 2000000, Time: 0.46s, Rate: 4376085 ops/sec
+        else
+        {
+            sched_yield();
+        }
     }
     printf("th:%d pop: %d\n", id, cnt);
     return NULL;

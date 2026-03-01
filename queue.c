@@ -39,8 +39,9 @@ void enqueue(Queue* q,  void *value)
         uint16_t next_tag = unpack_tag(tail_next);
 
         //cas 전에 이미 변화 감지한 경우
-        if(old_tail != q->tail) 
+        if(old_tail != q->tail)
         {
+            sched_yield();
             continue;
         }
 
@@ -48,8 +49,9 @@ void enqueue(Queue* q,  void *value)
         {
             //tail인데 next가 잇는 경우 최신화
             //tail에서 aba 문제를 풀기 위해서 원래 tail의 태그에서 1 증가시켰음!
-            new_tail = pack_tagged_ptr(next, old_tag + 1);  
+            new_tail = pack_tagged_ptr(next, old_tag + 1);
             __sync_bool_compare_and_swap(&(q->tail), old_tail, new_tail); //tail 최신화
+            sched_yield();
         }
         else
         {
@@ -63,6 +65,7 @@ void enqueue(Queue* q,  void *value)
                 __sync_bool_compare_and_swap(&q->tail, old_tail, new_tail);
                 return;
             }
+            sched_yield();
         }
     }
 }
@@ -73,26 +76,23 @@ Node* dequeue(Queue* q)
     uint16_t old_tag;
     Node* node, *old_node;
     Node* dummy;
-    do
+    while(1)
     {
         dummy_head = q->head;
         dummy = unpack_ptr(dummy_head);
-        
+
         old_head = dummy->next;
         old_tag = unpack_tag(old_head);
         old_node = unpack_ptr(old_head);
         if (!old_node) {return NULL;}
         old_next = old_node->next;
         node = unpack_ptr(old_next);
-        //printf("dummy: %d %d\n", (int)(intptr_t)(dummy->value), (int)(intptr_t)(old_node->value));
         new_head = pack_tagged_ptr(node, old_tag + 1);
-        
-        //printf("dummy: %d %d %d\n", (int)(intptr_t)(dummy->value), (int)(intptr_t)(old_node->value), (int)(intptr_t)(node->value));
 
-
-
-        
-    } while (!__sync_bool_compare_and_swap(&(dummy->next), old_head, new_head));
+        if (__sync_bool_compare_and_swap(&(dummy->next), old_head, new_head))
+            break;
+        sched_yield();
+    }
 
     if (!node) 
     {
