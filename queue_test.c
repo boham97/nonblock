@@ -1,72 +1,86 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <stdint.h>  
-#include "queue.h"
+#include <stdint.h>
 #include <unistd.h>
 #include <sched.h>
 #include <time.h>
+#include <signal.h>
+#include "queue.h"
 
-// 측정 코드 추가
-struct timespec start, end;
-
-
-#define THREADS 12                          //6 보다 12가 ops 높음
+#define THREADS 12
 #define OPS     400000
 
 Queue q;
 
+/* ---------- 시그널 종료 플래그 ---------- */
+volatile sig_atomic_t stop_flag = 0;
 
-// cc -g -o queue queue.c queue_test.c -lpthread
+/* ---------- 스레드별 consume 카운터 ---------- */
+long long consumed_per_thread[THREADS] = {0};
 
+/* ---------- SIGINT 핸들러 ---------- */
+void handle_sigint(int sig)
+{
+    stop_flag = 1;
+}
 
-
-void* producer(void* arg) 
+/* ---------- Producer ---------- */
+void* producer(void* arg)
 {
     int id = (intptr_t)arg;
-    for (int i = 0; i < OPS; i++) 
+
+    for (int i = 0; i < OPS; i++)
     {
-        enqueue(&q, (void*)(intptr_t)(id * OPS + i + 1 ));
+        enqueue(&q, (void*)(intptr_t)(id * OPS + i + 1));
     }
-    // printf("th %d append: %d\n", id,  id * (OPS + 1) + 1);
+
+    printf("th %d append: %d\n", id, OPS);
     return NULL;
 }
 
-void* consumer(void* arg) 
+/* ---------- Consumer ---------- */
+void* consumer(void* arg)
 {
     int id = (intptr_t)arg;
-    int cnt = 0;
     int pop_count = 0;
-    int count = 0;
     Node* n;
-    while (pop_count < OPS) 
+
+    while (!stop_flag && pop_count < OPS)
     {
         n = dequeue(&q);
+
         if (n)
         {
-            cnt = (int)(intptr_t)(n->value);
-            free(n);
+            //free(n);
             pop_count++;
+            consumed_per_thread[id]++;
         }
         else
         {
             sched_yield();
         }
     }
-    printf("th:%d pop: %d\n", id, cnt);
+
+    printf("th:%d pop: %lld\n", id, consumed_per_thread[id]);
     return NULL;
 }
 
-int main() {
+int main()
+{
+    signal(SIGINT, handle_sigint);
+
     initQueue(&q);
 
-    //glibc pool에 미리 로딩ㅋㅋㅋㅋ
+    /* glibc malloc 워밍업 */
     const int N = 10000;
     Node *nodes[N];
-    for (int i = 0; i < N; i++) 
+
+    for (int i = 0; i < N; i++)
     {
         nodes[i] = (Node *)malloc(sizeof(Node));
-        if (!nodes[i]) {
+        if (!nodes[i])
+        {
             fprintf(stderr, "malloc failed at %d\n", i);
             exit(1);
         }
@@ -74,38 +88,48 @@ int main() {
         nodes[i]->next = 0;
     }
 
-    printf("Allocated %d nodes\n", N);
-
-    // 10,000개 해제
-    for (int i = 0; i < N; i++) 
-    {
+    for (int i = 0; i < N; i++)
         free(nodes[i]);
-    }  
-
 
     pthread_t prod[THREADS], cons[THREADS];
+
+    struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
-    for (int i = 0; i < THREADS; i++) 
+
+    for (int i = 0; i < THREADS; i++)
     {
         pthread_create(&prod[i], NULL, producer, (void*)(intptr_t)i);
         pthread_create(&cons[i], NULL, consumer, (void*)(intptr_t)i);
     }
 
-    for (int i = 0; i < THREADS; i++) 
-    {
+    for (int i = 0; i < THREADS; i++)
         pthread_join(prod[i], NULL);
-    }
-    for (int i = 0; i < THREADS; i++) 
-    {
+
+    for (int i = 0; i < THREADS; i++)
         pthread_join(cons[i], NULL);
-    }
+
     clock_gettime(CLOCK_MONOTONIC, &end);
-    double elapsed = (end.tv_sec - start.tv_sec) + 
-                    (end.tv_nsec - start.tv_nsec) / 1e9;
-    printf("Total ops: %d, Time: %.2fs, Rate: %.0f ops/sec\n", 
-       THREADS * OPS, elapsed, (THREADS * OPS) / elapsed);
-    printf("All threads finished.\n");
-    if(dequeue(&q))printf("something wrong\n");
-    // if(dequeue(&q))printf("something wrong\n");
+
+    double elapsed =
+        (end.tv_sec - start.tv_sec) +
+        (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    printf("\n===== Consumed Per Thread =====\n");
+
+    long long total = 0;
+    for (int i = 0; i < THREADS; i++)
+    {
+        printf("Consumer %2d: %lld\n", i, consumed_per_thread[i]);
+        total += consumed_per_thread[i];
+    }
+
+    printf("\nTotal consumed: %lld\n", total);
+    printf("Elapsed Time : %.2f sec\n", elapsed);
+
+    if (elapsed > 0)
+        printf("Throughput : %.0f ops/sec\n", total / elapsed);
+
+    printf("===============================\n");
+
     return 0;
 }

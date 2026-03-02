@@ -2,7 +2,8 @@
 #define QUEUE_H
 
 #include <stdint.h>
-
+#include <sched.h>
+#include <immintrin.h>
 
 typedef struct Node {
     void *value;
@@ -44,6 +45,7 @@ void initQueue(Queue* q);
 
 // push/pop 함수 선언
 void enqueue(Queue* q,  void *value);
+void enqueue_node(Queue* q, Node* node); //풀 테스트
 Node* dequeue(Queue* q);
 
 #endif // QUEUE_H
