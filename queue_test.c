@@ -9,7 +9,7 @@
 #include "queue.h"
 
 #define THREADS 12
-#define OPS     400000
+#define OPS     1000000
 
 Queue q;
 
@@ -18,6 +18,9 @@ volatile sig_atomic_t stop_flag = 0;
 
 /* ---------- 스레드별 consume 카운터 ---------- */
 long long consumed_per_thread[THREADS] = {0};
+
+/* ---------- 배리어: 모든 스레드 동시 출발 ---------- */
+pthread_barrier_t barrier;
 
 /* ---------- SIGINT 핸들러 ---------- */
 void handle_sigint(int sig)
@@ -29,6 +32,8 @@ void handle_sigint(int sig)
 void* producer(void* arg)
 {
     int id = (intptr_t)arg;
+
+    pthread_barrier_wait(&barrier);
 
     for (int i = 0; i < OPS; i++)
     {
@@ -45,6 +50,8 @@ void* consumer(void* arg)
     int id = (intptr_t)arg;
     int pop_count = 0;
     Node* n;
+
+    pthread_barrier_wait(&barrier);
 
     while (!stop_flag && pop_count < OPS)
     {
@@ -69,6 +76,9 @@ void* consumer(void* arg)
 int main()
 {
     signal(SIGINT, handle_sigint);
+
+    /* 배리어 초기화: producer THREADS + consumer THREADS */
+    pthread_barrier_init(&barrier, NULL, THREADS * 2);
 
     initQueue(&q);
 
@@ -107,6 +117,8 @@ int main()
 
     for (int i = 0; i < THREADS; i++)
         pthread_join(cons[i], NULL);
+
+    pthread_barrier_destroy(&barrier);
 
     clock_gettime(CLOCK_MONOTONIC, &end);
 
