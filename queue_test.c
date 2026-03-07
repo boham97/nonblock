@@ -22,6 +22,12 @@ long long consumed_per_thread[THREADS] = {0};
 /* ---------- 배리어: 모든 스레드 동시 출발 ---------- */
 pthread_barrier_t barrier;
 
+/* ---------- Producer 인자: id + 미리 할당된 노드 풀 ---------- */
+typedef struct {
+    int   id;
+    Node *pool;
+} ProdArg;
+
 /* ---------- SIGINT 핸들러 ---------- */
 void handle_sigint(int sig)
 {
@@ -31,13 +37,16 @@ void handle_sigint(int sig)
 /* ---------- Producer ---------- */
 void* producer(void* arg)
 {
-    int id = (intptr_t)arg;
+    ProdArg *pa = (ProdArg *)arg;
+    int id      = pa->id;
+    Node *pool  = pa->pool;
 
     pthread_barrier_wait(&barrier);
 
     for (int i = 0; i < OPS; i++)
     {
-        enqueue(&q, (void*)(intptr_t)(id * OPS + i + 1));
+        pool[i].value = (void*)(intptr_t)(id * OPS + i + 1);
+        enqueue_node(&q, &pool[i]);
     }
 
     printf("th %d append: %d\n", id, OPS);
@@ -59,7 +68,6 @@ void* consumer(void* arg)
 
         if (n)
         {
-            //free(n);
             pop_count++;
             consumed_per_thread[id]++;
         }
@@ -77,40 +85,40 @@ int main()
 {
     signal(SIGINT, handle_sigint);
 
-    /* 배리어 초기화: producer THREADS + consumer THREADS */
-    pthread_barrier_init(&barrier, NULL, THREADS * 2);
+    /* 배리어 초기화: producer THREADS + consumer THREADS + main */
+    pthread_barrier_init(&barrier, NULL, THREADS * 2 + 1);
 
     initQueue(&q);
 
-    /* glibc malloc 워밍업 */
-    const int N = 10000;
-    Node *nodes[N];
+    /* 스레드별 노드 풀 미리 할당 (측정 전) */
+    Node    *pools[THREADS];
+    ProdArg  prod_args[THREADS];
 
-    for (int i = 0; i < N; i++)
+    for (int i = 0; i < THREADS; i++)
     {
-        nodes[i] = (Node *)malloc(sizeof(Node));
-        if (!nodes[i])
+        pools[i] = (Node *)malloc(OPS * sizeof(Node));
+        if (!pools[i])
         {
-            fprintf(stderr, "malloc failed at %d\n", i);
+            fprintf(stderr, "pool malloc failed at thread %d\n", i);
             exit(1);
         }
-        nodes[i]->value = NULL;
-        nodes[i]->next = 0;
+        prod_args[i].id   = i;
+        prod_args[i].pool = pools[i];
     }
-
-    for (int i = 0; i < N; i++)
-        free(nodes[i]);
 
     pthread_t prod[THREADS], cons[THREADS];
 
     struct timespec start, end;
-    clock_gettime(CLOCK_MONOTONIC, &start);
 
     for (int i = 0; i < THREADS; i++)
     {
-        pthread_create(&prod[i], NULL, producer, (void*)(intptr_t)i);
+        pthread_create(&prod[i], NULL, producer, &prod_args[i]);
         pthread_create(&cons[i], NULL, consumer, (void*)(intptr_t)i);
     }
+
+    /* 모든 스레드가 배리어에 도달하면 start를 찍고 동시에 풀어줌 */
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    pthread_barrier_wait(&barrier);
 
     for (int i = 0; i < THREADS; i++)
         pthread_join(prod[i], NULL);
@@ -121,6 +129,10 @@ int main()
     pthread_barrier_destroy(&barrier);
 
     clock_gettime(CLOCK_MONOTONIC, &end);
+
+    /* 풀 해제 */
+    for (int i = 0; i < THREADS; i++)
+        free(pools[i]);
 
     double elapsed =
         (end.tv_sec - start.tv_sec) +

@@ -70,35 +70,90 @@ void enqueue(Queue* q,  void *value)
     }
 }
 
-Node* dequeue(Queue* q) 
+void enqueue_node(Queue* q, Node* node)
 {
-    uint64_t dummy_head, old_head, old_next, new_head;
-    uint16_t old_tag;
-    Node* node, *old_node;
-    Node* dummy;
+    node->next = 0;
+
+    uint64_t old_tail, new_next, tail_next, new_tail;
     while(1)
     {
-        dummy_head = q->head;
-        dummy = unpack_ptr(dummy_head);
+        old_tail = q->tail;
+        Node* old_ptr = unpack_ptr(old_tail);
+        uint16_t old_tag = unpack_tag(old_tail);
 
-        old_head = dummy->next;
-        old_tag = unpack_tag(old_head);
-        old_node = unpack_ptr(old_head);
-        if (!old_node) {return NULL;}
-        old_next = old_node->next;
-        node = unpack_ptr(old_next);
-        new_head = pack_tagged_ptr(node, old_tag + 1);
+        tail_next = old_ptr->next;
+        Node* next = unpack_ptr(tail_next);
+        uint16_t next_tag = unpack_tag(tail_next);
 
-        if (__sync_bool_compare_and_swap(&(dummy->next), old_head, new_head))
-            break;
-        sched_yield();
+        if(old_tail != q->tail)
+        {
+            sched_yield();
+            continue;
+        }
+
+        if(next)
+        {
+            new_tail = pack_tagged_ptr(next, old_tag + 1);
+            __sync_bool_compare_and_swap(&(q->tail), old_tail, new_tail);
+            sched_yield();
+        }
+        else
+        {
+            new_next = pack_tagged_ptr(node, next_tag + 1);
+            if(__sync_bool_compare_and_swap(&old_ptr->next, tail_next, new_next))
+            {
+                new_tail = pack_tagged_ptr(node, old_tag + 1);
+                __sync_bool_compare_and_swap(&q->tail, old_tail, new_tail);
+                return;
+            }
+            sched_yield();
+        }
     }
+}
 
-    if (!node) 
+Node* dequeue(Queue* q)
+{
+    uint64_t head, tail, next;
+    Node* head_ptr, *next_ptr;
+    void* pvalue;
+
+    while(1)
     {
-        __sync_bool_compare_and_swap(&(q->tail), 
-        pack_tagged_ptr(old_node, unpack_tag(q->tail)), 
-        pack_tagged_ptr(dummy, unpack_tag(q->tail) + 1));
+        head = q->head;
+        tail = q->tail;
+        head_ptr = unpack_ptr(head);
+        next = head_ptr->next;
+        next_ptr = unpack_ptr(next);
+
+        if (head != q->head)
+        {
+            sched_yield();
+            continue;
+        }
+
+        if (head_ptr == unpack_ptr(tail))
+        {
+            if (!next_ptr)
+                return NULL;
+            // tail이 뒤처짐 -> 전진시켜줌
+            __sync_bool_compare_and_swap(&(q->tail), tail,
+                pack_tagged_ptr(next_ptr, unpack_tag(tail) + 1));
+            sched_yield();
+        }
+        else
+        {
+            // CAS 전에 값을 먼저 읽어둠
+            pvalue = next_ptr->value;
+            if (__sync_bool_compare_and_swap(&(q->head), head,
+                pack_tagged_ptr(next_ptr, unpack_tag(head) + 1)))
+                break;
+            sched_yield();
+        }
     }
-    return old_node;
+
+    // head_ptr = 옛 dummy (큐에서 빠짐, 해제 가능)
+    // next_ptr = 새 dummy (큐에 남음)
+    // pvalue = 꺼낸 값
+    head_ptr->value = pvalue;
+    return head_ptr;
 }
