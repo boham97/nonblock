@@ -2,19 +2,20 @@
 #define QUEUE_H
 
 #include <stdint.h>
+#include <stdatomic.h>
 #include <sched.h>
 #include <immintrin.h>
 
 typedef struct Node {
     void *value;
-    uint64_t next;
+    _Atomic uint64_t next;
 } Node;
 
 typedef struct Queue {
-    uint64_t head; // Tagged pointer: [태그(16bit) | 포인터(48bit)]
-    char padding[64 - sizeof(uint64_t)];
-    uint64_t tail;
-    char padding2[64 - sizeof(uint64_t)];
+    _Atomic uint64_t head; // Tagged pointer: [태그(16bit) | 포인터(48bit)]
+    char padding[64 - sizeof(_Atomic uint64_t)];
+    _Atomic uint64_t tail;
+    char padding2[64 - sizeof(_Atomic uint64_t)];
 } Queue;
 
 // Tagged pointer 관련 매크로

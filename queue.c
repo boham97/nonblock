@@ -21,25 +21,25 @@ void initQueue(Queue* q)
     q->tail = tagptr;
 }
 
-void enqueue(Queue* q,  void *value) 
+void enqueue(Queue* q,  void *value)
 {
     Node *node = malloc(sizeof(Node));
     node->value = value;
-    node->next = 0; //태그 + 널 = 0 + 0 = 0
+    atomic_store_explicit(&node->next, (uint64_t)0, memory_order_relaxed); //태그 + 널 = 0 + 0 = 0
 
     uint64_t old_tail, new_next, tail_next, new_tail;
     while(1)
     {
-        old_tail = q->tail;
+        old_tail = atomic_load_explicit(&q->tail, memory_order_acquire);
         Node* old_ptr = unpack_ptr(old_tail);
         uint16_t old_tag = unpack_tag(old_tail);
-        
-        tail_next = old_ptr->next;
+
+        tail_next = atomic_load_explicit(&old_ptr->next, memory_order_acquire);
         Node* next = unpack_ptr(tail_next);
         uint16_t next_tag = unpack_tag(tail_next);
 
         //cas 전에 이미 변화 감지한 경우
-        if(old_tail != q->tail)
+        if(old_tail != atomic_load_explicit(&q->tail, memory_order_acquire))
         {
             sched_yield();
             continue;
@@ -50,7 +50,8 @@ void enqueue(Queue* q,  void *value)
             //tail인데 next가 잇는 경우 최신화
             //tail에서 aba 문제를 풀기 위해서 원래 tail의 태그에서 1 증가시켰음!
             new_tail = pack_tagged_ptr(next, old_tag + 1);
-            __sync_bool_compare_and_swap(&(q->tail), old_tail, new_tail); //tail 최신화
+            atomic_compare_exchange_strong_explicit(&q->tail, &old_tail, new_tail,
+                memory_order_acq_rel, memory_order_relaxed); //tail 최신화
             sched_yield();
         }
         else
@@ -58,11 +59,13 @@ void enqueue(Queue* q,  void *value)
             //tail next의 값을 바꿀꺼니까 tail next의 tag 에서 1 증가
             new_next = pack_tagged_ptr(node, next_tag + 1);
 
-            if(__sync_bool_compare_and_swap(&old_ptr->next, tail_next, new_next))
+            if(atomic_compare_exchange_strong_explicit(&old_ptr->next, &tail_next, new_next,
+                memory_order_acq_rel, memory_order_relaxed))
             {
                 //tail을 바꾸니까 테일 태그 기준으로
                 new_tail = pack_tagged_ptr(node, old_tag + 1);
-                __sync_bool_compare_and_swap(&q->tail, old_tail, new_tail);
+                atomic_compare_exchange_strong_explicit(&q->tail, &old_tail, new_tail,
+                    memory_order_acq_rel, memory_order_relaxed);
                 return;
             }
             sched_yield();
@@ -72,20 +75,20 @@ void enqueue(Queue* q,  void *value)
 
 void enqueue_node(Queue* q, Node* node)
 {
-    node->next = 0;
+    atomic_store_explicit(&node->next, (uint64_t)0, memory_order_relaxed);
 
     uint64_t old_tail, new_next, tail_next, new_tail;
     while(1)
     {
-        old_tail = q->tail;
+        old_tail = atomic_load_explicit(&q->tail, memory_order_acquire);
         Node* old_ptr = unpack_ptr(old_tail);
         uint16_t old_tag = unpack_tag(old_tail);
 
-        tail_next = old_ptr->next;
+        tail_next = atomic_load_explicit(&old_ptr->next, memory_order_acquire);
         Node* next = unpack_ptr(tail_next);
         uint16_t next_tag = unpack_tag(tail_next);
 
-        if(old_tail != q->tail)
+        if(old_tail != atomic_load_explicit(&q->tail, memory_order_acquire))
         {
             sched_yield();
             continue;
@@ -94,16 +97,19 @@ void enqueue_node(Queue* q, Node* node)
         if(next)
         {
             new_tail = pack_tagged_ptr(next, old_tag + 1);
-            __sync_bool_compare_and_swap(&(q->tail), old_tail, new_tail);
+            atomic_compare_exchange_strong_explicit(&q->tail, &old_tail, new_tail,
+                memory_order_acq_rel, memory_order_relaxed);
             sched_yield();
         }
         else
         {
             new_next = pack_tagged_ptr(node, next_tag + 1);
-            if(__sync_bool_compare_and_swap(&old_ptr->next, tail_next, new_next))
+            if(atomic_compare_exchange_strong_explicit(&old_ptr->next, &tail_next, new_next,
+                memory_order_acq_rel, memory_order_relaxed))
             {
                 new_tail = pack_tagged_ptr(node, old_tag + 1);
-                __sync_bool_compare_and_swap(&q->tail, old_tail, new_tail);
+                atomic_compare_exchange_strong_explicit(&q->tail, &old_tail, new_tail,
+                    memory_order_acq_rel, memory_order_relaxed);
                 return;
             }
             sched_yield();
@@ -119,13 +125,13 @@ Node* dequeue(Queue* q)
 
     while(1)
     {
-        head = q->head;
-        tail = q->tail;
+        head = atomic_load_explicit(&q->head, memory_order_acquire);
+        tail = atomic_load_explicit(&q->tail, memory_order_acquire);
         head_ptr = unpack_ptr(head);
-        next = head_ptr->next;
+        next = atomic_load_explicit(&head_ptr->next, memory_order_acquire);
         next_ptr = unpack_ptr(next);
 
-        if (head != q->head)
+        if (head != atomic_load_explicit(&q->head, memory_order_acquire))
         {
             sched_yield();
             continue;
@@ -136,16 +142,18 @@ Node* dequeue(Queue* q)
             if (!next_ptr)
                 return NULL;
             // tail이 뒤처짐 -> 전진시켜줌
-            __sync_bool_compare_and_swap(&(q->tail), tail,
-                pack_tagged_ptr(next_ptr, unpack_tag(tail) + 1));
+            uint64_t new_tail = pack_tagged_ptr(next_ptr, unpack_tag(tail) + 1);
+            atomic_compare_exchange_strong_explicit(&q->tail, &tail, new_tail,
+                memory_order_acq_rel, memory_order_relaxed);
             sched_yield();
         }
         else
         {
             // CAS 전에 값을 먼저 읽어둠
             pvalue = next_ptr->value;
-            if (__sync_bool_compare_and_swap(&(q->head), head,
-                pack_tagged_ptr(next_ptr, unpack_tag(head) + 1)))
+            uint64_t new_head = pack_tagged_ptr(next_ptr, unpack_tag(head) + 1);
+            if (atomic_compare_exchange_strong_explicit(&q->head, &head, new_head,
+                memory_order_acq_rel, memory_order_relaxed))
                 break;
             sched_yield();
         }
